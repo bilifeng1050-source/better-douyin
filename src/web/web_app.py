@@ -132,6 +132,7 @@ from src.utils.download_history_index import (
     remove_download_history_entries,
     upsert_download_history_entries,
 )
+from src.utils.metadata_exporter import append_metadata_sample
 from src.user.user_manager import DouyinUserManager
 
 # 移除增强下载器支持
@@ -4243,6 +4244,13 @@ def download_single_video():
 
         media_urls = normalize_download_media_urls(media_urls, raw_media_type)
         video_fallback_urls = []
+        export_metadata = dict(data)
+        export_metadata.update({
+            'source': 'download_single_video',
+            'aweme_id': aweme_id,
+            'desc': video_desc,
+            'author_name': author_name,
+        })
 
         should_refresh_video_media = (
             raw_media_type == 'video'
@@ -4261,6 +4269,8 @@ def download_single_video():
                 return jsonify(_login_error_response(detail))
 
             if detail:
+                export_metadata = dict(detail)
+                export_metadata['source'] = 'download_single_video'
                 detail_media_type = detail.get('raw_media_type') or detail.get('media_type') or raw_media_type
                 detail_media_urls = normalize_download_media_urls(detail.get('media_urls', []), detail_media_type)
                 if detail_media_urls:
@@ -4384,6 +4394,7 @@ def download_single_video():
                         )
                     
                     if success:
+                        append_metadata_sample(export_metadata, file_path)
                         socketio.emit('download_progress', {
                             'task_id': task_id,
                             'progress': 100,
@@ -6291,6 +6302,8 @@ def download_video_by_aweme_id():
         media_type = detail.get('media_type', 'video')
         media_urls = normalize_download_media_urls(detail.get('media_urls', []), media_type)
         video_fallback_urls = user_manager.get_video_download_urls((detail.get('video') or {}))
+        export_metadata = dict(detail)
+        export_metadata['source'] = 'download_video'
 
         if not media_urls:
             return jsonify({'success': False, 'message': '无法获取视频下载地址'}), 500
@@ -6333,6 +6346,7 @@ def download_video_by_aweme_id():
                     )
 
                 if success:
+                    append_metadata_sample(export_metadata, name)
                     socketio.emit('download_complete', {
                         'task_id': task_id,
                         'aweme_id': aweme_id,

@@ -192,3 +192,6 @@ scripts/explore_*.py
 scripts/extract_*.py
 scripts/fingerprint_generator.py
 scripts/sign_*.py
+
+# Local metadata export samples
+metadata_exports/
