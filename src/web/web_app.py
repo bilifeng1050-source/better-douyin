@@ -132,7 +132,7 @@ from src.utils.download_history_index import (
     remove_download_history_entries,
     upsert_download_history_entries,
 )
-from src.utils.metadata_exporter import append_metadata_sample
+from src.utils.metadata_exporter import append_metadata_records, append_metadata_sample
 from src.user.user_manager import DouyinUserManager
 
 # 移除增强下载器支持
@@ -4224,6 +4224,56 @@ def get_user_videos():
     except Exception as e:
         logger.error(f" 获取用户视频列表失败: {str(e)}")
         return jsonify({'success': False, 'message': f'获取用户视频列表失败: {str(e)}'}), 500
+
+
+@app.route('/api/export_user_metadata', methods=['POST'])
+def export_user_metadata():
+    """只导出用户主页作品 metadata，不下载媒体文件。"""
+    try:
+        data = _request_json()
+        sec_uid = str(data.get('sec_uid') or '').strip()
+        limit = _coerce_int(data.get('limit'), 20, 1, 1000)
+        export_name = data.get('export_name') or 'user_profile_metadata_sample'
+
+        if not sec_uid:
+            return jsonify({'success': False, 'message': 'sec_uid不能为空'}), 400
+
+        if not user_manager:
+            return jsonify({'success': False, 'message': '请先设置Cookie'}), 400
+
+        records = run_async(user_manager.get_user_videos(sec_uid, limit=limit))
+
+        if isinstance(records, dict) and records.get('_need_verify'):
+            return jsonify(_verify_or_request_error_response(
+                records,
+                '导出用户作品 metadata 失败，抖音作品接口暂时拒绝请求，请稍后重试',
+            ))
+        if isinstance(records, dict) and records.get('_need_login'):
+            return jsonify(_login_error_response(records))
+        if isinstance(records, dict) and records.get('_error'):
+            return jsonify({
+                'success': False,
+                'message': records.get('message') or '导出用户作品 metadata 失败',
+            })
+        if not isinstance(records, list):
+            return jsonify({'success': False, 'message': '获取用户作品 metadata 失败'}), 500
+
+        export_path, exported_count = append_metadata_records(
+            records,
+            export_name=export_name,
+            source='user_profile_metadata',
+        )
+
+        return jsonify({
+            'success': True,
+            'export_path': str(export_path),
+            'exported_count': exported_count,
+            'sec_uid': sec_uid,
+            'limit': limit,
+        })
+    except Exception as e:
+        logger.error(f"导出用户作品 metadata 失败: {str(e)}")
+        return jsonify({'success': False, 'message': f'导出用户作品 metadata 失败: {str(e)}'}), 500
                 
 @app.route('/api/download_single_video', methods=['POST'])
 def download_single_video():
